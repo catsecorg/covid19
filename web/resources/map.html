@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>COVID-19</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.3/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+	<link rel="stylesheet" type="text/css" href="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7.2/leaflet.css">
+	<link rel="stylesheet" type="text/css" href="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet-geocoder/0.0.1-beta.5/esri-leaflet-geocoder.css">
+	<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+    <style>
+        body,
+		html {
+		  height: 100%;
+		  font-family:Arial;
+		}
+		  		
+		#mapSearchContainer{
+		  position:fixed;
+		  top:20px;
+		  right: 40px;
+		  height:30px;
+		  width:180px;
+		  z-index:110;
+		  font-size:10pt;
+		  color:#5d5d5d;
+		  border:solid 1px #bbb;
+		  background-color:#f8f8f8;
+		}
+		.pointer{
+		  position:absolute;
+		  top:86px;
+		  left:60px;
+		  z-index:99999;
+		}
+
+        .container {
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            position: absolute;
+        }
+        .header {
+            position: absolute;
+            top: -8px;
+            left: 40px;
+            padding-left: 50px;
+            right: 0;
+            padding: 10px;
+            z-index: 1000;
+            background-color: rgba(255,255,255,0.75);
+        }
+        h2 {
+            margin: 10px 0;
+            margin-left: 50px;
+        }
+        h3 {
+            margin: 0;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        #property-list, #playback {
+            display: inline-block;
+        }
+
+   
+    </style>
+  </head>
+
+  <body>
+    <div class="header">
+       <h5 id="stats"></h5>
+    </div>
+    <div class="container">
+        <div id="map"></div>
+    </div>
+
+    <!-- leaflet -->
+    <script src="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7.2/leaflet.js"></script>
+	<script src="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet/0.0.1-beta.5/esri-leaflet.js"></script>
+	<script src="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet-geocoder/0.0.1-beta.5/esri-leaflet-geocoder.js"></script>
+
+    <!-- D3 -->
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <!-- Demo setup -->
+    <script>
+		var stats_div = document.getElementById("stats");
+
+        var circles = [];
+        var numberFormatter = d3.format(",");
+        var properties = [{
+                code: 'Confirmed',
+                desc: 'Confirmed'
+            },
+            {
+                code: 'Death',
+                desc: 'Death'
+            },
+            {
+                code: 'Recovered',
+                desc: 'Recovered'
+            }
+        ];
+        var currProperty = 'Confirmed';
+        var ProvinceState = 'Province/State';
+        var CountryRegion = 'Country/Region';
+
+        // Initialize the map and assign it to a variable for later use
+        var theMap = L.map('map', {
+            // Set latitude and longitude of the map center (required)
+            center: [31.160629, 112.248863],
+            // Set the initial zoom level, values 0-18, where 0 is most zoomed-out (required)
+            zoom: 3
+        });
+		theMap.setMaxBounds([[84.67351256610522, -174.0234375], [-58.995311187950925, 223.2421875]]);
+		theMap.attributionControl.addAttribution('COVID-19 (2019-nCoV) <a href="https://github.com/CSSEGISandData/COVID-19">JHU CSSE</a>');
+
+        L.control.scale().addTo(theMap);
+
+        // Create a Tile Layer and add it to the map
+        L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+            maxZoom: 15, minZoom: 2,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        }).
+        addTo(theMap);
+
+        var searchControl = new L.esri.Controls.Geosearch().addTo(theMap);
+
+        var results = new L.LayerGroup().addTo(theMap);
+
+        searchControl.on('map', function(data) {
+            results.clearLayers();
+            for (var i = data.results.length - 1; i >= 0; i--) {
+                results.addLayer(L.marker(data.results[i].latlng));
+            }
+        });
+
+        var radiusScale = d3.scaleLinear().domain([0, 200]).range([7, 70]).clamp(true);
+        var colorScale = d3.scaleSequential(d3.interpolateOrRd).domain([0, 100]);
+
+        function renderCircles() {
+            circles.forEach(function(c) {
+                c.remove();
+            })
+            circles = [];
+
+            theData.features.forEach(function(feature) {
+                var c = L.circleMarker(
+                    [feature.geometry.coordinates[1], feature.geometry.coordinates[0]], {
+                        radius: radiusScale(feature.properties[currProperty] * 0.001),
+                        color: "black",
+                        fillColor: colorScale(feature.properties[currProperty]),
+                        fillOpacity: 0.8
+                    });
+                c.addTo(theMap);
+                if (feature.properties[ProvinceState] !== "") {
+                    c.bindPopup('<h3>' + feature.properties[ProvinceState] + '</h3> - ' + feature.properties[CountryRegion] + '<br><br><b>' + currProperty + ': </b>' + numberFormatter(feature.properties[currProperty]) + '<br>' + '<b>Death: </b>' + numberFormatter(feature.properties.Death) + '<br>' + '<b>Recovered: </b>' + numberFormatter(feature.properties.Recovered));
+                } else {
+                    c.bindPopup('<h3>' + feature.properties[CountryRegion] + '</h3><br><b>' + currProperty + ': </b>' + numberFormatter(feature.properties[currProperty]) + '<br>' + '<b>Death: </b>' + numberFormatter(feature.properties.Death) + '<br>' + '<b>Recovered: </b>' + numberFormatter(feature.properties.Recovered));
+                }
+                circles.push(c);
+            });
+        }
+
+        function fetchData() {
+			var url = 'https://scl9hana001.northeurope.cloudapp.azure.com:51056/node/getSessionInfo';
+            d3.json(url).then(function(data) {
+
+				console.log(data);
+				theData = data;
+                renderCircles();
+            });
+        }
+
+        fetchData();
+
+		Promise.all([
+            d3.json("https://scl9hana001.northeurope.cloudapp.azure.com:51056/stats"),
+        ]).then(function(datasets) {
+			console.log(datasets[0]);
+			var numberFormatter = d3.format(",");
+			var stats;
+			stats = "As of: " + datasets[0][0].date + ". ";
+			stats = stats + "Confirmed: " + numberFormatter(datasets[0][0].confirmed) + ". ";
+			stats = stats + "Recovered: " + numberFormatter(datasets[0][0].recovered) + ". ";
+			stats = stats + "Death: " + numberFormatter(datasets[0][0].death) + ". ";
+			$(stats_div).text(stats);
+		});
+
+    </script>
+
+  </body>
+</html>
